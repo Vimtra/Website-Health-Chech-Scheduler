@@ -63,7 +63,7 @@ def check_websites():
         print(f"Scanning {site}...")
         try:
             # Step A: Check the main homepage first
-            response = requests.get(url, headers=headers, timeout=15)
+            response = requests.get(site, headers=headers, timeout=15)
 
             if response.status_code == 200:
                 # Step B: If the homepage is up, pull all its internal links
