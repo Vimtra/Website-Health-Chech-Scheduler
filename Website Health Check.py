@@ -134,24 +134,37 @@ def check_websites():
     return html_report
 
 def send_email(html_content):
-    print("\nDrafting HTML email...")
-    msg = MIMEMultipart("alternative")
-    msg['From'] = SENDER_EMAIL
-    msg['To'] = RECEIVER_EMAIL
-    msg['Subject'] = "📊 Daily Website Status Report (Deep Scan)"
+    # We rename the function task but keep the name so the rest of your script doesn't break
+    print("\nCreating GitHub Issue to trigger native email notifications...")
+    
+    # GitHub automatically gives every workflow run a temporary access token
+    token = os.environ.get("GITHUB_TOKEN")
+    repository = os.environ.get("GITHUB_REPOSITORY") # e.g., "Vimtra/Website-Health-Chech-Scheduler"
+    
+    if not token or not repository:
+        print("❌ Error: Missing GITHUB_TOKEN or GITHUB_REPOSITORY environment variables.")
+        return
 
-    msg.attach(MIMEText(html_content, 'html'))
+    url = f"https://github.com{repository}/issues"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # Clean up HTML styles slightly so it looks neat inside a GitHub issue markdown view
+    issue_data = {
+        "title": "📊 Daily Website Status Report (Deep Scan)",
+        "body": html_content
+    }
 
     try:
-        server = smtplib.SMTP('://gmail.com', 465)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        text = msg.as_string()
-        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, text)
-        server.quit()
-        print("✅ Success! The comprehensive report has been emailed to you.")
+        response = requests.post(url, json=issue_data, headers=headers)
+        if response.status_code == 201:
+            print("✅ Success! The comprehensive report has been created as an issue and emailed via GitHub.")
+        else:
+            print(f"❌ Failed to create issue. Status: {response.status_code}, Response: {response.text}")
     except Exception as e:
-        print(f"❌ Failed to send email: {e}")
+        print(f"❌ Network failure while creating issue: {e}")
 
 if __name__ == "__main__":
     final_report = check_websites()
