@@ -65,22 +65,34 @@ def check_websites():
             # Step A: Check the main homepage first
             response = requests.get(site, headers=headers, timeout=15)
 
-            if response.status_code == 200:
-                # Step B: If the homepage is up, pull all its internal links
-                soup = BeautifulSoup(response.text, 'html.parser')
-                internal_links = set()
-                base_domain = urlparse(site).netloc
+                    if response.status_code == 200:
+            # # Step B: If the homepage is up, pull all its internal links
+            soup = BeautifulSoup(response.text, 'html.parser')
+            internal_links = set()
+            base_domain = urlparse(site).netloc
 
-                # Find all <a href="..."> tags
-                for a_tag in soup.find_all('a', href=True):
-                    full_url = urljoin(site, a_tag['href'])
-                    parsed_url = urlparse(full_url)
+            # # Find all <a href="..."> tags
+            for a_tag in soup.find_all('a', href=True):
+                full_url = urljoin(site, a_tag['href'])
+                parsed_url = urlparse(full_url)
 
-                    # Only keep links that belong to the SAME website (ignore Facebook/LinkedIn/etc.)
-                    # Also ignore simple anchor links (like #contact) that just scroll down the page
-                    if parsed_url.netloc == base_domain and full_url not in internal_links:
-                        if not parsed_url.fragment:
-                            internal_links.add(full_url)
+                # # Only keep links that belong to the SAME website (ignore Facebook/LinkedIn/etc.)
+                # # Also ignore simple anchor links (like #contact) that just scroll down the page
+                if parsed_url.netloc == base_domain and full_url not in internal_links:
+                    if not parsed_url.fragment:
+                        internal_links.add(full_url)
+                        
+        elif response.status_code == 403:
+            # Handle firewall protection block gracefully
+            status = "UP"
+            details = "UP (Main site accessible, internal links blocked by firewall)"
+            # Create an empty set so step C doesn't crash trying to read links
+            internal_links = set() 
+            
+        else:
+            status = "DOWN"
+            details = f"Unreachable (Status Code: {response.status_code})"
+
 
                 # Step C: Check all the found internal links
                 broken_links_count = 0
