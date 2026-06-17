@@ -25,17 +25,141 @@ WEBSITES = [
     "https://thewindgrove.com", "https://vsolvetechnologies.com"
 ]
 
+# Extensions and patterns to skip when scanning internal links
+SKIP_EXTENSIONS = ('.pdf', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+                   '.mp4', '.mp3', '.zip', '.doc', '.docx', '.xls', '.xlsx',
+                   '.ppt', '.pptx', '.css', '.js', '.ico', '.woff', '.woff2',
+                   '.ttf', '.eot')
+
+SKIP_PREFIXES = ('mailto:', 'tel:', 'javascript:', 'data:', 'sms:', 'whatsapp:')
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/120.0.0.0 Safari/537.36"
+}
+
+
+def is_server_alive(status_code):
+    """Any HTTP response means the server is alive and responding.
+    Even 403/503 means a firewall or WAF is active — the site is UP."""
+    return status_code < 500 or status_code == 503
+
+
+def is_page_ok(status_code):
+    """For sub-page checks: 2xx and 3xx are fine."""
+    return status_code < 400
+
+
+def should_skip_url(url):
+    """Skip non-HTML resources and non-http links."""
+    lower = url.lower()
+    if any(lower.startswith(p) for p in SKIP_PREFIXES):
+        return True
+    path = urlparse(lower).path
+    if any(path.endswith(ext) for ext in SKIP_EXTENSIONS):
+        return True
+    return False
+
+
+def check_link(url):
+    """Check a single internal link. Try HEAD first; if the server rejects it
+    (405, 403, or other error), retry with GET before marking it broken."""
+    try:
+        resp = requests.head(url, headers=HEADERS, timeout=8, allow_redirects=True)
+        if is_page_ok(resp.status_code):
+            return True
+        # Many servers reject HEAD — fall back to GET before calling it broken
+        if resp.status_code in (403, 405, 406, 501):
+            resp = requests.get(url, headers=HEADERS, timeout=8, allow_redirects=True)
+            return is_page_ok(resp.status_code)
+        return False
+    except requests.exceptions.RequestException:
+        return False
+
+
+def check_site(site):
+    """Check a single website: homepage first, then its internal links.
+    Returns a tuple: (status_class, status_label, detail_text)
+    """
+    # ── Step A: Check the homepage ──
+    try:
+        response = requests.get(site, headers=HEADERS, timeout=15, allow_redirects=True)
+    except requests.exceptions.RequestException:
+        # First attempt failed — retry with a different User-Agent
+        try:
+            fallback_headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                              "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                              "Version/17.0 Safari/605.1.15"
+            }
+            response = requests.get(site, headers=fallback_headers, timeout=10, allow_redirects=True)
+        except requests.exceptions.RequestException:
+            return ("status-down", "DOWN", "Unreachable (no response from server)")
+
+    # If we got ANY HTTP response, the server is alive
+    if not is_server_alive(response.status_code):
+        return ("status-down", "DOWN", f"Server Error {response.status_code}")
+
+    # If the server blocked us (403/503) but is clearly alive
+    if response.status_code in (401, 403, 503):
+        return ("status-up", "UP", "Main site live (protected by firewall/WAF — normal)")
+
+    # ── Step B: Homepage is 2xx — now scan internal links ──
+    if response.status_code >= 400:
+        return ("status-down", "DOWN", f"Main Site Error {response.status_code}")
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    internal_links = set()
+    base_domain = urlparse(site).netloc
+
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href'].strip()
+        if should_skip_url(href):
+            continue
+        full_url = urljoin(site, href)
+        parsed = urlparse(full_url)
+        # Only same-domain, no fragments, no query-heavy duplicates
+        if parsed.netloc == base_domain and not parsed.fragment:
+            # Normalize: strip trailing slash for dedup
+            clean = full_url.rstrip('/')
+            if clean != site.rstrip('/'):  # skip homepage itself
+                internal_links.add(clean)
+
+    if not internal_links:
+        return ("status-up", "UP", "200 OK (No internal links found)")
+
+    # ── Step C: Check each internal link ──
+    broken = []
+    for link in internal_links:
+        if not check_link(link):
+            broken.append(link)
+
+    total = len(internal_links)
+
+    if not broken:
+        return ("status-up", "UP", f"All {total} linked pages are OK")
+    else:
+        broken_list = "<br>".join(f"&nbsp;&nbsp;• {b}" for b in broken[:5])
+        if len(broken) > 5:
+            broken_list += f"<br>&nbsp;&nbsp;... and {len(broken) - 5} more"
+        return (
+            "status-warning",
+            "UP (Warnings)",
+            f"{len(broken)} of {total} sub-pages returned errors:<br>{broken_list}"
+        )
+
+
 def check_websites():
     print("Checking main websites and scanning internal pages...")
     print("This may take a few minutes depending on how many pages each site has. Please wait!\n")
 
-    # Start building the HTML template
     html_report = """
     <html>
     <head>
         <style>
             body { font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px; }
-            .container { max-width: 800px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+            .container { max-width: 850px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
             h2 { color: #333333; text-align: center; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dddddd; }
@@ -45,11 +169,12 @@ def check_websites():
             .status-down { color: #dc3545; font-weight: bold; }
             a { color: #007bff; text-decoration: none; }
             a:hover { text-decoration: underline; }
+            .small { font-size: 12px; color: #888; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h2>Comprehensive Website Status Report</h2>
+            <h2>📊 Comprehensive Website Status Report</h2>
             <table>
                 <tr>
                     <th>Website</th>
@@ -58,63 +183,22 @@ def check_websites():
                 </tr>
     """
 
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-
     for site in WEBSITES:
         print(f"Scanning {site}...")
-        try:
-            response = requests.get(site, headers=headers, timeout=15)
-
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                internal_links = set()
-                base_domain = urlparse(site).netloc
-
-                for a_tag in soup.find_all('a', href=True):
-                    full_url = urljoin(site, a_tag['href'])
-                    parsed_url = urlparse(full_url)
-
-                    if parsed_url.netloc == base_domain and full_url not in internal_links:
-                        if not parsed_url.fragment:
-                            internal_links.add(full_url)
-
-                broken_links_count = 0
-                checked_links_count = len(internal_links)
-
-                for link in internal_links:
-                    try:
-                        link_response = requests.head(link, headers=headers, timeout=5, allow_redirects=True)
-                        if link_response.status_code >= 400:
-                            broken_links_count += 1
-                    except requests.exceptions.RequestException:
-                        broken_links_count += 1
-
-                if broken_links_count == 0:
-                    detail_text = f"All {checked_links_count} linked pages are OK" if checked_links_count > 0 else "200 OK (No internal links found)"
-                    html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>{detail_text}</td></tr>"
-                else:
-                    html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-warning'>UP (Warnings)</td><td>{broken_links_count} out of {checked_links_count} sub-pages are BROKEN</td></tr>"
-
-            elif response.status_code in [401, 403, 503]:
-                html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Main site live, internal links protected by firewall)</td></tr>"
-
-            else:
-                html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Main Site Error {response.status_code}</td></tr>"
-
-        except requests.exceptions.RequestException:
-            try:
-                fallback_headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"}
-                fallback_resp = requests.get(site, headers=fallback_headers, timeout=10, allow_redirects=True)
-
-                if fallback_resp.status_code in [200, 401, 403, 503]:
-                    html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Verified via connection fallback routine)</td></tr>"
-                else:
-                    html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable (Status: {fallback_resp.status_code})</td></tr>"
-            except requests.exceptions.RequestException:
-                html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable</td></tr>"
+        css_class, label, detail = check_site(site)
+        html_report += (
+            f"<tr>"
+            f"<td><a href='{site}'>{site}</a></td>"
+            f"<td class='{css_class}'>{label}</td>"
+            f"<td>{detail}</td>"
+            f"</tr>"
+        )
 
     html_report += """
             </table>
+            <p class="small" style="text-align:center; margin-top:16px;">
+                Note: "Protected by firewall" means the site is live but blocks automated scanners — this is normal and healthy.
+            </p>
         </div>
     </body>
     </html>
@@ -152,9 +236,8 @@ def send_email(html_content):
         print("⚠️  Skipping GitHub Issue: Missing GITHUB_TOKEN or GITHUB_REPOSITORY.")
         return
 
-    # ✅ FIX: Use the correct GitHub REST API endpoint
     url = f"https://api.github.com/repos/{repository}/issues"
-    headers = {
+    api_headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"
     }
@@ -165,7 +248,7 @@ def send_email(html_content):
     }
 
     try:
-        response = requests.post(url, json=issue_data, headers=headers)
+        response = requests.post(url, json=issue_data, headers=api_headers)
         if response.status_code == 201:
             print("✅ GitHub Issue created successfully!")
         else:
