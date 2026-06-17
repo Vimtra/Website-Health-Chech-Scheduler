@@ -14,9 +14,9 @@ jobs:
           python-version: '3.10'
       - name: Install dependencies
         run: pip install jupyter nbconvert requests beautifulsoup4
-      - name: Run notebook
+      - name: Run script
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           # List any other secrets here using the same format
-        run: jupyter nbconvert --to notebook --execute "Website_Health_Check.ipynb"
+        run: python Website Health Check.py
