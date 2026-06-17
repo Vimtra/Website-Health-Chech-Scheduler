@@ -17,12 +17,12 @@ if not all([SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
 
 # 2. Your list of websites
 WEBSITES = [
-    "https://www.vimtra.com/", "https://vimtraventures.com/", "https://www.urpantech.com/",
-    "https://techalphallc.com/", "https://techmyndsinc.com/", "https://www.insightintelli.com/",
-    "https://xcellifesciences.com/", "https://www.sacrosanctinfo.com/", "https://www.rushipharma.com/",
-    "https://tekcog.com", "https://www.aadyot.com/", "https://www.vimtechit.com/",
-    "https://startekpro.com/", "https://thebellabeau.github.io/bella-beau/", "https://syncorex.com/",
-    "https://thewindgrove.com/", "https://vsolvetechnologies.com/"
+    "https://vimtra.com", "https://vimtraventures.com", "https://urpantech.com",
+    "https://techalphallc.com", "https://techmyndsinc.com", "https://insightintelli.com",
+    "https://xcellifesciences.com", "https://sacrosanctinfo.com", "https://rushipharma.com",
+    "https://tekcog.com", "https://aadyot.com", "https://vimtechit.com",
+    "https://startekpro.com", "https://github.io", "https://syncorex.com",
+    "https://thewindgrove.com", "https://vsolvetechnologies.com"
 ]
 
 def check_websites():
@@ -101,7 +101,7 @@ def check_websites():
                 else:
                     html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-warning'>UP (Warnings)</td><td>{broken_links_count} out of {checked_links_count} sub-pages are BROKEN</td></tr>"
                         
-            elif response.status_code == 403:
+            elif response.status_code in:
                 # Handle firewall cloud hosting protection block gracefully
                 html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Main site live, internal links protected by firewall)</td></tr>"
                 
@@ -110,7 +110,19 @@ def check_websites():
                 html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Main Site Error {response.status_code}</td></tr>"
 
         except requests.exceptions.RequestException:
-            html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable</td></tr>"
+            # 🔄 FALLBACK: If direct connection is aggressively dropped/timed out by a strict firewall
+            try:
+                # Try a lightweight fallback check using a clean Mac Safari agent profile to force an answer
+                fallback_headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"}
+                fallback_resp = requests.get(site, headers=fallback_headers, timeout=10, allow_redirects=True)
+                
+                if fallback_resp.status_code in:
+                    html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Verified via connection fallback routine)</td></tr>"
+                else:
+                    html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable (Status: {fallback_resp.status_code})</td></tr>"
+            except requests.exceptions.RequestException:
+                # If both attempts fail completely, the site is genuinely down
+                html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable</td></tr>"
 
     # Close the HTML tags
     html_report += """
@@ -131,7 +143,7 @@ def send_email(html_content):
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server = smtplib.SMTP('://gmail.com', 587)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         text = msg.as_string()
