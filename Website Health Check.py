@@ -143,7 +143,7 @@ def send_email(html_content):
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
-        server = smtplib.SMTP('://gmail.com', 587)
+        server = smtplib.SMTP('://gmail.com', 465)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         text = msg.as_string()
