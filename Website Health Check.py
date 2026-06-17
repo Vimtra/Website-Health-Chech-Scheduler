@@ -6,10 +6,11 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import os
 
-# 1. Retrieve credentials securely from Colab Secrets
+# 1. Retrieve credentials securely from GitHub Environment Variables
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL')
 SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD')
 RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL')
+
 if not all([SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
     print("❌ Error: One or more secret keys are missing from environment variables.")
     raise SystemExit
@@ -19,7 +20,7 @@ WEBSITES = [
     "https://www.vimtra.com/", "https://vimtraventures.com/", "https://www.urpantech.com/",
     "https://techalphallc.com/", "https://techmyndsinc.com/", "https://www.insightintelli.com/",
     "https://xcellifesciences.com/", "https://www.sacrosanctinfo.com/", "https://www.rushipharma.com/",
-    "https://www.tekcog.com", "https://www.aadyot.com/", "https://www.vimtechit.com/",
+    "https://tekcog.com", "https://www.aadyot.com/", "https://www.vimtechit.com/",
     "https://startekpro.com/", "https://thebellabeau.github.io/bella-beau/", "https://syncorex.com/",
     "https://thewindgrove.com/", "https://vsolvetechnologies.com/"
 ]
@@ -65,61 +66,50 @@ def check_websites():
             # Step A: Check the main homepage first
             response = requests.get(site, headers=headers, timeout=15)
 
-                    if response.status_code == 200:
-            # # Step B: If the homepage is up, pull all its internal links
-            soup = BeautifulSoup(response.text, 'html.parser')
-            internal_links = set()
-            base_domain = urlparse(site).netloc
+            if response.status_code == 200:
+                # Step B: If the homepage is up, pull all its internal links
+                soup = BeautifulSoup(response.text, 'html.parser')
+                internal_links = set()
+                base_domain = urlparse(site).netloc
 
-            # # Find all <a href="..."> tags
-            for a_tag in soup.find_all('a', href=True):
-                full_url = urljoin(site, a_tag['href'])
-                parsed_url = urlparse(full_url)
+                # Find all <a href="..."> tags
+                for a_tag in soup.find_all('a', href=True):
+                    full_url = urljoin(site, a_tag['href'])
+                    parsed_url = urlparse(full_url)
 
-                # # Only keep links that belong to the SAME website (ignore Facebook/LinkedIn/etc.)
-                # # Also ignore simple anchor links (like #contact) that just scroll down the page
-                if parsed_url.netloc == base_domain and full_url not in internal_links:
-                    if not parsed_url.fragment:
-                        internal_links.add(full_url)
-                        
-        elif response.status_code == 403:
-            # Handle firewall protection block gracefully
-            status = "UP"
-            details = "UP (Main site accessible, internal links blocked by firewall)"
-            # Create an empty set so step C doesn't crash trying to read links
-            internal_links = set() 
-            
-        else:
-            status = "DOWN"
-            details = f"Unreachable (Status Code: {response.status_code})"
-
-
+                    # Only keep links that belong to the SAME website
+                    if parsed_url.netloc == base_domain and full_url not in internal_links:
+                        if not parsed_url.fragment:
+                            internal_links.add(full_url)
+                
                 # Step C: Check all the found internal links
                 broken_links_count = 0
                 checked_links_count = len(internal_links)
 
                 for link in internal_links:
                     try:
-                        # We use .head() instead of .get() here because it's much faster
-                        # just to check the status code without downloading the whole page text again
                         link_response = requests.head(link, headers=headers, timeout=5, allow_redirects=True)
                         if link_response.status_code >= 400:
                             broken_links_count += 1
                     except requests.exceptions.RequestException:
                         broken_links_count += 1
 
-                # Step D: Format the HTML row based on what we found behind the scenes
+                # Step D: Format the HTML row based on sub-page checks
                 if broken_links_count == 0:
                     detail_text = f"All {checked_links_count} linked pages are OK" if checked_links_count > 0 else "200 OK (No internal links found)"
                     html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>{detail_text}</td></tr>"
                 else:
                     html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-warning'>UP (Warnings)</td><td>{broken_links_count} out of {checked_links_count} sub-pages are BROKEN</td></tr>"
-
+                        
+            elif response.status_code == 403:
+                # Handle firewall cloud hosting protection block gracefully
+                html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Main site live, internal links protected by firewall)</td></tr>"
+                
             else:
-                # If the main site fails, don't bother checking sub-pages
+                # Handle unexpected bad HTTP status codes
                 html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Main Site Error {response.status_code}</td></tr>"
 
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable</td></tr>"
 
     # Close the HTML tags
@@ -151,7 +141,6 @@ def send_email(html_content):
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
 
-# Run the functions
 if __name__ == "__main__":
     final_report = check_websites()
     send_email(final_report)
