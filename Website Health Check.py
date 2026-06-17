@@ -33,6 +33,12 @@ SKIP_EXTENSIONS = ('.pdf', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
 
 SKIP_PREFIXES = ('mailto:', 'tel:', 'javascript:', 'data:', 'sms:', 'whatsapp:')
 
+# Domains to skip sub-page scanning (e.g. GoDaddy Website Builder blocks bots on sub-pages)
+# The homepage is still checked — only internal link scanning is skipped.
+SKIP_SUBPAGE_SCAN = [
+    "vimtechit.com",
+]
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -108,6 +114,11 @@ def check_site(site):
     # ── Step B: Homepage is 2xx — now scan internal links ──
     if response.status_code >= 400:
         return ("status-down", "DOWN", f"Main Site Error {response.status_code}")
+
+    # Skip sub-page scanning for whitelisted domains (e.g. GoDaddy blocks bots)
+    base_domain = urlparse(site).netloc
+    if any(domain in base_domain for domain in SKIP_SUBPAGE_SCAN):
+        return ("status-up", "UP", "200 OK (Sub-page scan skipped — hosting platform blocks bots)")
 
     soup = BeautifulSoup(response.text, 'html.parser')
     internal_links = set()
