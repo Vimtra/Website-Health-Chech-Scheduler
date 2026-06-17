@@ -1,8 +1,8 @@
 name: Run Website Health Check
 on:
-  schedule:
-    - cron: '0 7 * * *'   # 7am UTC
-    - cron: '0 19 * * *'  # 7pm UTC
+ schedule:
+    - cron: '30 1 * * *'  # 7am IST (1:30am UTC)
+    - cron: '30 13 * * *' # 7pm IST (1:30pm UTC)
 
 jobs:
   run-notebook:
