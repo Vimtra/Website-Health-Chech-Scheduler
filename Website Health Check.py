@@ -143,7 +143,9 @@ def send_email(html_content):
 # Run the functions
 if __name__ == "__main__":
     final_report = check_websites()
-    send_email(final_report)import requests
+    send_email(final_report)
+
+import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
