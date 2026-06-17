@@ -7,10 +7,9 @@ from urllib.parse import urljoin, urlparse
 import os
 
 # 1. Retrieve credentials securely from Colab Secrets
-try:
-    SENDER_EMAIL = os.environ.get('SENDER_EMAIL')
-    SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD')
-    RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL')
+SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD')
+RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL')
 # Validate that secrets are present
 if not all([SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
     print("❌ Error: One or more secret keys are missing from environment variables.")
