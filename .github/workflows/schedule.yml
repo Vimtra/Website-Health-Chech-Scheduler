@@ -1,22 +1,29 @@
 name: Run Website Health Check
+
 on:
- schedule:
+  workflow_dispatch:
+  schedule:
     - cron: '30 1 * * *'  # 7am IST (1:30am UTC)
     - cron: '30 13 * * *' # 7pm IST (1:30pm UTC)
 
 jobs:
-  run-notebook:
+  run-script:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
       - name: Install dependencies
-        run: pip install jupyter nbconvert requests beautifulsoup4
-      - name: Run script
-        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-        RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
-        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          # List any other secrets here using the same format
-        run: python Website Health Check.py
+        run: pip install requests beautifulsoup4
+
+      - name: Run Website Health Check Script
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        run: python Website_Health_Check.py
