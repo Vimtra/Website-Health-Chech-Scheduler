@@ -42,7 +42,12 @@ SKIP_SUBPAGE_SCAN = [
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/120.0.0.0 Safari/537.36"
+                  "Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -97,7 +102,11 @@ def check_site(site):
             fallback_headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                               "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-                              "Version/17.0 Safari/605.1.15"
+                              "Version/17.0 Safari/605.1.15",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
             }
             response = requests.get(site, headers=fallback_headers, timeout=10, allow_redirects=True)
         except requests.exceptions.RequestException:
@@ -107,13 +116,14 @@ def check_site(site):
     if not is_server_alive(response.status_code):
         return ("status-down", "DOWN", f"Server Error {response.status_code}")
 
-    # If the server blocked us (403/503) but is clearly alive
-    if response.status_code in (401, 403, 503):
+    # If the server blocked our bot request (4xx) but is clearly alive and responding.
+    # A dead server can't return an HTTP status code — any response = server is running.
+    if response.status_code in (401, 403, 405, 406, 415, 429, 503):
         return ("status-up", "UP", "Main site live (protected by firewall/WAF — normal)")
 
-    # ── Step B: Homepage is 2xx — now scan internal links ──
+    # Catch any other 4xx we didn't list above — still means server is alive
     if response.status_code >= 400:
-        return ("status-down", "DOWN", f"Main Site Error {response.status_code}")
+        return ("status-up", "UP", f"Main site live (server returned {response.status_code}, likely bot protection)")
 
     # Skip sub-page scanning for whitelisted domains (e.g. GoDaddy blocks bots)
     base_domain = urlparse(site).netloc
