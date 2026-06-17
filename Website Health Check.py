@@ -101,7 +101,7 @@ def check_websites():
                 else:
                     html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-warning'>UP (Warnings)</td><td>{broken_links_count} out of {checked_links_count} sub-pages are BROKEN</td></tr>"
                         
-            elif response.status_code in:
+            elif response.status_code in [401, 403, 503]:
                 # Handle firewall cloud hosting protection block gracefully
                 html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Main site live, internal links protected by firewall)</td></tr>"
                 
@@ -116,7 +116,7 @@ def check_websites():
                 fallback_headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"}
                 fallback_resp = requests.get(site, headers=fallback_headers, timeout=10, allow_redirects=True)
                 
-                if fallback_resp.status_code in:
+                if fallback_resp.status_code in [200, 401, 403, 503]:
                     html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-up'>UP</td><td>UP (Verified via connection fallback routine)</td></tr>"
                 else:
                     html_report += f"<tr><td><a href='{site}'>{site}</a></td><td class='status-down'>DOWN</td><td>Unreachable (Status: {fallback_resp.status_code})</td></tr>"
